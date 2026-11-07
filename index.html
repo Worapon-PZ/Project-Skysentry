@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Project SkySentry // Tactical Weather Radar & Ground-Truth System</title>
+  <meta name="description" content="Zero-budget tactical client-side GIS weather radar dashboard with real-time ground-truth calibration for Bang Kruai, Nonthaburi.">
+
+  <!-- Google Fonts: Chakra Petch (Futuristic Thai/Latin), Rajdhani & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+
+  <!-- SkySentry Tactical Stylesheet -->
+  <link rel="stylesheet" href="style.css?v=0.1.4">
+</head>
+<body>
+  <!-- Fullscreen Leaflet Map Container -->
+  <div id="map"></div>
+
+  <!-- =========================================================================
+       TOP-CENTER: SLIM TACTICAL STORM ALERT PILL (IMAGE 1 MATCH)
+       ========================================================================= -->
+  <div class="tactical-panel tactical-storm-card alert-normal" id="tacticalStormCard" role="status" aria-live="polite">
+    <div class="storm-card-main">
+      <span class="storm-card-icon" id="stormCardIcon"><i class="fa-solid fa-circle-check"></i></span>
+      <div class="storm-card-content">
+        <span class="storm-card-title" id="stormCardTitle">สภาพอากาศปกติ • ไม่พบกลุ่มฝนคุกคามในรัศมี 40 กม.</span>
+      </div>
+    </div>
+    <div class="storm-card-badge monospace-val" id="stormCardBadge">NORMAL // 40KM</div>
+  </div>
+
+  <!-- =========================================================================
+       DESKTOP TOP-LEFT: TACTICAL HUD & ACCORDION (IMAGE 1 MATCH)
+       ========================================================================= -->
+  <header class="tactical-panel top-left-panel" id="headerPanel">
+    <div class="hud-brand-row">
+      <div class="brand-titles">
+        <h1 class="brand-title">PROJECT SKYSENTRY</h1>
+        <div class="brand-sub-badge">
+          <span class="sub-text">v0.1.0 (DEV BUILD) &bull; ACTIVE</span>
+          <span class="pulsing-beacon"></span>
+        </div>
+      </div>
+      <span id="zoomBadge" class="zoom-chip" style="display:none;">Z: 10</span>
+    </div>
+
+    <!-- Station Coordinates Inset Box -->
+    <div class="hud-station-box">
+      <div class="station-box-row">
+        <span class="station-box-name"><i class="fa-solid fa-location-dot"></i> <span id="stationNameDisplay">บางกรวย, นนทบุรี</span></span>
+        <span class="station-box-lat monospace-val" id="coordsDisplayLat">13.8050° N,</span>
+      </div>
+      <div class="station-box-row">
+        <span class="station-box-sub">(Bang Kruai)</span>
+        <span class="station-box-lon monospace-val" id="coordsDisplayLon">100.4728° E</span>
+      </div>
+      <div class="station-box-row threat-row">
+        <span class="station-box-threat"><i class="fa-solid fa-crosshairs"></i> เป้าเฝ้าระวัง: 40 กม.</span>
+      </div>
+      <span id="coordsDisplay" class="sr-only">13.8050° N, 100.4728° E</span>
+    </div>
+
+    <!-- Action Buttons Row -->
+    <div class="hud-actions-row">
+      <button id="customPinBtn" class="tool-btn pin-tool-btn primary-pin-btn" title="คลิกเพื่อเลือกพิกัดบนแผนที่ด้วยตนเอง (Custom Pin)">
+        <i class="fa-solid fa-map-pin"></i> <span>เลือกพิกัดเอง</span>
+      </button>
+
+      <div class="hud-dropdown-wrap">
+        <button id="hudSettingsBtn" class="tool-btn settings-dropdown-btn" title="ตัวเลือกพิกัดเพิ่มเติม" aria-haspopup="true" aria-expanded="false">
+          <i class="fa-solid fa-gear"></i> <span>ตัวเลือก</span> <i class="fa-solid fa-chevron-down caret-icon"></i>
+        </button>
+
+        <div class="hud-dropdown-menu" id="hudSettingsMenu">
+          <button id="locateBtn" class="dropdown-item" title="ใช้พิกัดตำแหน่งจริงของอุปกรณ์ (GPS Geolocation)">
+            <i class="fa-solid fa-location-crosshairs"></i> <span>พิกัดของฉัน</span>
+          </button>
+          <button id="resetLocationBtn" class="dropdown-item" title="กลับสู่ตำแหน่งเริ่มต้น/บ้าน">
+            <i class="fa-solid fa-rotate-left"></i> <span>รีเซ็ต</span>
+          </button>
+          <button id="setHomeBtn" class="dropdown-item" title="บันทึกพิกัดปัจจุบันเป็นตำแหน่งบ้าน">
+            <i class="fa-solid fa-house-chimney"></i> <span>บันทึกบ้าน</span>
+          </button>
+          <div class="dropdown-divider"></div>
+          <button id="themeToggleBtn" class="dropdown-item" title="สลับโหมดสว่าง/มืด (Light/Dark Theme)" aria-label="สลับโหมดสว่าง/มืด">
+            <i class="fa-solid fa-moon" id="themeIcon"></i> <span id="themeText">โหมดมืด</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compatibility Preserved DOM Hooks (Hidden) -->
+    <div class="sr-only" aria-hidden="true" style="display:none;">
+      <button id="leftPanelToggleBtn"></button>
+      <div id="leftCollapsedBadge"><span id="leftCollapsedText"></span></div>
+      <div id="leftPanelContent"></div>
+      <div id="headerStormStatusBox"><span id="headerStormStatusText"></span></div>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       DESKTOP RIGHT: WEATHER DOCK (WINDY-STYLE ACCORDION DRAWER - IMAGE 1 MATCH)
+       ========================================================================= -->
+  <aside class="tactical-panel right-weather-dock" id="weatherPanel">
+    <div class="panel-section-title">
+      <div class="title-with-icon">
+        <i class="fa-solid fa-cloud-sun-rain"></i>
+        <span>สภาพอากาศสด (OPEN-METEO)</span>
+        <span class="collapsed-weather-chip" id="collapsedWeatherChip">--°C</span>
+      </div>
+      <div class="panel-header-actions">
+        <span class="refresh-indicator" id="weatherRefreshBadge" title="อัปเดตอัตโนมัติทุก 10 นาที"><i class="fa-solid fa-arrows-rotate"></i> สด</span>
+        <button id="rightPanelToggleBtn" class="panel-collapse-btn drawer-toggle-btn" title="พับเก็บ / ขยายสภาพอากาศ" aria-label="พับเก็บ / ขยายสภาพอากาศ">
+          <span id="rightPanelToggleText">COLLAPSE</span> <i class="fa-solid fa-chevron-down" id="rightPanelToggleIcon"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Collapsible Weather Content -->
+    <div class="panel-collapsible-content" id="rightPanelContent">
+      <!-- Current Weather Metrics 4-Grid -->
+      <div class="weather-metrics-grid">
+        <div class="metric-card">
+          <div class="metric-icon temp-icon"><i class="fa-solid fa-temperature-half"></i></div>
+          <div class="metric-info">
+            <span class="metric-label">อุณหภูมิ</span>
+            <span class="metric-value monospace-val" id="currentTemp">--.-°C</span>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon humidity-icon"><i class="fa-solid fa-droplet"></i></div>
+          <div class="metric-info">
+            <span class="metric-label">ความชื้น</span>
+            <span class="metric-value monospace-val" id="currentHumidity">--%</span>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon rain-icon"><i class="fa-solid fa-cloud-showers-heavy"></i></div>
+          <div class="metric-info">
+            <span class="metric-label">โอกาสเกิดฝน</span>
+            <span class="metric-value monospace-val" id="currentRainProb">--%</span>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon wind-icon"><i class="fa-solid fa-wind"></i></div>
+          <div class="metric-info">
+            <span class="metric-label">ความเร็วลม</span>
+            <span class="metric-value monospace-val" id="currentWind">-- km/h</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rain Arrival Prediction (ETA Engine) Card -->
+      <div class="prediction-eta-card" id="predictionCard">
+        <div class="prediction-header">
+          <span class="eta-title"><i class="fa-solid fa-cloud-showers-heavy"></i> การคาดการณ์ฝนตก (PREDICTED ETA)</span>
+          <span class="eta-badge" id="etaStateBadge">STANDBY / MONITORING</span>
+        </div>
+        <div class="eta-body">
+          <div class="eta-time-row">
+            <span class="eta-label">เวลาที่คาดว่าจะตก:</span>
+            <span class="eta-time monospace-val" id="predictedEtaDisplay">กำลังคำนวณ...</span>
+          </div>
+          <div class="eta-countdown-row">
+            <span class="eta-subtext" id="etaCountdownText">เรดาร์ตรวจเมฆฝนในรัศมี 15 กม.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hourly Forecast Strip (Next 12 Hours - Windy Style) -->
+      <div class="hourly-forecast-section">
+        <div class="forecast-section-header">
+          <span><i class="fa-regular fa-clock"></i> พยากรณ์รายชั่วโมง (NEXT 12 HOURS)</span>
+        </div>
+        <div class="hourly-scroll-container" id="hourlyForecastContainer">
+          <div class="forecast-card-placeholder">กำลังโหลดข้อมูลรายชั่วโมง...</div>
+        </div>
+      </div>
+
+      <!-- Dedicated 7-Day Outlook Modal Trigger Button -->
+      <button id="open7DayModalBtn" class="tactical-btn secondary-btn outlook-trigger-btn" title="เปิดหน้าต่างพยากรณ์ล่วงหน้า 7 วัน">
+        <i class="fa-solid fa-calendar-week"></i>
+        <span>📅 พยากรณ์ล่วงหน้า 7 วัน (7-Day Outlook)</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- =========================================================================
+       DESKTOP BOTTOM-CENTER: SLIM HORIZONTAL TIMELINE BAR (IMAGE 1 MATCH)
+       ========================================================================= -->
+  <main class="tactical-panel bottom-center-panel slim-timeline-bar" id="playbackPanel" role="region" aria-label="แถบควบคุมเวลาเรดาร์">
+    <!-- 1. Play/Pause Button (Round Blue Icon) -->
+    <button id="playPauseBtn" class="tactical-btn play-btn slim-play-btn" title="เล่น/หยุดภาพเคลื่อนไหวเรดาร์" disabled>
+      <i class="fa-solid fa-play" id="playIcon"></i>
+      <span id="playText" class="sr-only">เล่นเรดาร์</span>
+    </button>
+
+    <!-- 2. Step Backward Button (|<) -->
+    <button id="prevBtn" class="tactical-btn slim-nav-btn" title="เฟรมก่อนหน้า (-5 นาที)" disabled>
+      <i class="fa-solid fa-backward-step"></i>
+    </button>
+
+    <!-- 3. Slider Container with Past & Nowcast Dual Labels -->
+    <div class="slim-slider-container">
+      <div class="slider-nowcast-labels">
+        <span class="slider-label-past"><i class="fa-solid fa-clock-rotate-left"></i> PAST (-2 ชม.)</span>
+        <span class="timeline-floating-time monospace-val" id="timestamp">--:--:-- ICT</span>
+        <span class="slider-label-nowcast"><i class="fa-solid fa-bolt-lightning"></i> NOWCAST (+30 นาที)</span>
+      </div>
+      <input type="range" id="timelineSlider" min="0" max="0" value="0" step="1" disabled aria-label="แถบเวลาภาพเรดาร์">
+    </div>
+
+    <!-- 4. Step Forward Button (>|) -->
+    <button id="nextBtn" class="tactical-btn slim-nav-btn" title="เฟรมถัดไป (+5 นาที)" disabled>
+      <i class="fa-solid fa-forward-step"></i>
+    </button>
+
+    <!-- 5. Speed Button (1x) -->
+    <button id="speedBtn" class="tactical-btn speed-btn slim-speed-btn" title="ความเร็วการเล่น (คลิกเพื่อสลับ: 0.5x -> 1x -> 2x)">
+      <span id="speedText">1x</span>
+    </button>
+
+    <!-- Preserved compatibility hooks (Hidden) -->
+    <div class="sr-only" aria-hidden="true" style="display:none;">
+      <div id="frameCounter">0 / 0</div>
+      <button id="firstFrameBtn"></button>
+      <button id="lastFrameBtn"></button>
+      <button id="playbackPanelToggleBtn"></button>
+      <div id="playbackContent"></div>
+    </div>
+  </main>
+
+  <!-- =========================================================================
+       DESKTOP BOTTOM-RIGHT: DOCKED COMPACT dBZ COLOR LEGEND & OPACITY (IMAGE 1 MATCH)
+       ========================================================================= -->
+  <aside class="tactical-panel docked-radar-legend" id="dockedRadarLegend" role="complementary" aria-label="คำอธิบายความเข้มเรดาร์">
+    <div class="legend-scale-row">
+      <span class="legend-title">dBZ:</span>
+      <div class="legend-scale">
+        <span class="legend-step" style="background:#00ecec;" title="15-20 dBZ: ละอองฝน">15</span>
+        <span class="legend-step" style="background:#01a0f6;" title="20-30 dBZ: ฝนเล็กน้อย">20</span>
+        <span class="legend-step" style="background:#00e400;" title="30-35 dBZ: ฝนปานกลาง">25</span>
+        <span class="legend-step" style="background:#ff9900;" title="35-45 dBZ: ฝนปานกลางถึงหนัก">35</span>
+        <span class="legend-step" style="background:#e70000;" title="45-55 dBZ: ฝนตกหนัก">45</span>
+        <span class="legend-step" style="background:#b91c1c;" title="55-65 dBZ: ฝนหนักมาก">55</span>
+        <span class="legend-step" style="background:#9100ff;" title="65+ dBZ: ลูกเห็บ/พายุรุนแรง">65+</span>
+      </div>
+    </div>
+    <div class="docked-opacity-wrap" title="ปรับความโปร่งใสเรดาร์">
+      <i class="fa-solid fa-sliders opacity-icon"></i>
+      <input type="range" id="opacitySlider" min="0.1" max="1" step="0.05" value="0.80" aria-label="ความโปร่งใสของเลเยอร์เรดาร์">
+      <span id="opacityVal" class="monospace-val opacity-pct">80%</span>
+    </div>
+  </aside>
+
+  <!-- =========================================================================
+       DESKTOP BOTTOM-LEFT: GROUND-TRUTH TACTICAL BUTTON (BESIDE ZOOM - IMAGE 1 MATCH)
+       ========================================================================= -->
+  <aside class="bottom-left-action" id="feedbackActionContainer">
+    <button id="openFeedbackModalBtn" class="ground-truth-trigger-btn" aria-haspopup="dialog" aria-expanded="false" title="เปิดระบบบันทึกความแม่นยำภาคพื้นดิน">
+      <div class="gt-icon-box">
+        <i class="fa-solid fa-bullseye gt-icon"></i>
+      </div>
+      <div class="trigger-btn-labels">
+        <span class="trigger-main-text">รายงานความแม่นยำ</span>
+        <span class="trigger-sub-text">บันทึกผลจริง (GROUND-TRUTH)</span>
+      </div>
+    </button>
+  </aside>
+
+  <!-- =========================================================================
+       MOBILE-FIRST UI DOCK & TOP BAR (VISIBLE ON SCREENS < 768px)
+       ========================================================================= -->
+  <!-- Mobile Top Bar -->
+  <div class="mobile-top-bar" id="mobileTopBar">
+    <div class="mobile-top-left">
+      <span class="pulsing-beacon"></span>
+      <div class="mobile-station-info">
+        <span class="mobile-title">SKYSENTRY</span>
+        <span class="mobile-sub" id="mobileStationSub">บางกรวย, นนทบุรี</span>
+      </div>
+    </div>
+    <div class="mobile-top-right">
+      <span id="mobileZoomBadge" class="tactical-badge zoom-badge">ZOOM: 10</span>
+      <button id="mobileThemeToggleBtn" class="mobile-icon-btn" title="สลับโหมดสว่าง/มืด (Light/Dark Theme)">
+        <i class="fa-solid fa-sun" id="mobileThemeIcon"></i>
+      </button>
+      <button id="mobileLocateBtn" class="mobile-icon-btn" title="พิกัดของฉัน (GPS)">
+        <i class="fa-solid fa-location-crosshairs"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile Bottom Floating Action Dock -->
+  <div class="mobile-bottom-dock" id="mobileBottomDock">
+    <!-- Mini Player Scrub Bar -->
+    <div class="mobile-dock-player-row">
+      <button id="mobilePlayPauseBtn" class="mobile-dock-btn play-dock-btn" title="เล่น/หยุด">
+        <i class="fa-solid fa-play" id="mobilePlayIcon"></i>
+      </button>
+      <div class="mobile-slider-wrap">
+        <input type="range" id="mobileTimelineSlider" min="0" max="0" value="0" step="1" disabled aria-label="แถบเวลาภาพเรดาร์มือถือ">
+        <div class="mobile-time-display monospace-val" id="mobileTimestampDisplay">--:--:-- ICT</div>
+      </div>
+      <button id="mobileLiveBtn" class="mobile-dock-btn icon-dock-btn" title="กระโดดไปเฟรมสดปัจจุบัน (Live T0)">
+        <i class="fa-solid fa-forward-step"></i>
+      </button>
+    </div>
+
+    <!-- Primary Action Buttons Row -->
+    <div class="mobile-dock-actions-row">
+      <button id="openDrawerBtn" class="mobile-action-btn drawer-open-btn">
+        <i class="fa-solid fa-chart-pie"></i>
+        <span>ข้อมูล & สภาพอากาศ</span>
+      </button>
+      <button id="mobileOpenFeedbackBtn" class="mobile-action-btn feedback-quick-btn">
+        <i class="fa-solid fa-bolt"></i>
+        <span>⚡ บันทึกผลจริง</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MOBILE BOTTOM SHEET / DRAWER (SWIPE / TAP TO OPEN)
+       ========================================================================= -->
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <div class="mobile-drawer-sheet" id="mobileDrawerSheet" role="region" aria-label="เมนูควบคุมมือถือ">
+    <!-- Drawer Drag Bar -->
+    <div class="drawer-handle-bar"></div>
+
+    <div class="drawer-header">
+      <div class="drawer-title-wrap">
+        <i class="fa-solid fa-sliders"></i>
+        <span>PROJECT SKYSENTRY // TACTICAL HUD</span>
+      </div>
+      <button id="closeDrawerBtn" class="drawer-close-btn" aria-label="ปิดเมนู">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <!-- Drawer Navigation Tabs -->
+    <div class="drawer-tabs-nav">
+      <button class="drawer-tab-btn active" data-tab="weather">
+        <i class="fa-solid fa-cloud-sun-rain"></i> สภาพอากาศ
+      </button>
+      <button class="drawer-tab-btn" data-tab="radar">
+        <i class="fa-solid fa-satellite-dish"></i> เรดาร์ & สถานี
+      </button>
+      <button class="drawer-tab-btn" data-tab="feedback">
+        <i class="fa-solid fa-bolt"></i> Ground-Truth
+      </button>
+    </div>
+
+    <!-- Drawer Body (Tab Content Panes) -->
+    <div class="drawer-body">
+      <!-- TAB 1: WEATHER & ETA -->
+      <div class="drawer-tab-pane active" id="tab-weather">
+        <!-- 4-Grid Metrics -->
+        <div class="weather-metrics-grid">
+          <div class="metric-card">
+            <div class="metric-icon temp-icon"><i class="fa-solid fa-temperature-half"></i></div>
+            <div class="metric-info">
+              <span class="metric-label">อุณหภูมิ</span>
+              <span class="metric-value monospace-val" id="mobileCurrentTemp">--.-°C</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon humidity-icon"><i class="fa-solid fa-droplet"></i></div>
+            <div class="metric-info">
+              <span class="metric-label">ความชื้นสัมพัทธ์</span>
+              <span class="metric-value monospace-val" id="mobileCurrentHumidity">--%</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon rain-icon"><i class="fa-solid fa-cloud-showers-heavy"></i></div>
+            <div class="metric-info">
+              <span class="metric-label">โอกาสเกิดฝน</span>
+              <span class="metric-value monospace-val" id="mobileCurrentRainProb">--%</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon wind-icon"><i class="fa-solid fa-wind"></i></div>
+            <div class="metric-info">
+              <span class="metric-label">ความเร็วลม</span>
+              <span class="metric-value monospace-val" id="mobileCurrentWind">-- km/h</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rain Prediction ETA -->
+        <div class="prediction-eta-card">
+          <div class="prediction-header">
+            <span class="eta-title"><i class="fa-solid fa-satellite-dish"></i> การคาดการณ์ฝนตก (ETA)</span>
+            <span class="eta-badge" id="mobileEtaStateBadge">STANDBY</span>
+          </div>
+          <div class="eta-body">
+            <div class="eta-time-row">
+              <span class="eta-label">เวลาที่คาดว่าจะตก:</span>
+              <span class="eta-time monospace-val" id="mobilePredictedEtaDisplay">กำลังคำนวณ...</span>
+            </div>
+            <div class="eta-countdown-row">
+              <span class="eta-subtext" id="mobileEtaCountdownText">เรดาร์ตรวจเมฆฝนในรัศมี 15 กม.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hourly Forecast Strip & 7-Day Outlook Trigger (Mobile Drawer) -->
+        <div class="hourly-forecast-section">
+          <div class="forecast-section-header">
+            <span><i class="fa-regular fa-clock"></i> พยากรณ์รายชั่วโมง (NEXT 12 HOURS)</span>
+          </div>
+          <div class="hourly-scroll-container" id="mobileHourlyForecastContainer">
+            <div class="forecast-card-placeholder">กำลังโหลดข้อมูลรายชั่วโมง...</div>
+          </div>
+        </div>
+
+        <button id="mobileOpen7DayModalBtn" class="tactical-btn secondary-btn outlook-trigger-btn" style="margin-top:10px;" title="เปิดหน้าต่างพยากรณ์ล่วงหน้า 7 วัน">
+          <i class="fa-solid fa-calendar-week"></i>
+          <span>📅 พยากรณ์ล่วงหน้า 7 วัน (7-Day Outlook)</span>
+        </button>
+      </div>
+
+      <!-- TAB 2: RADAR & STATION SETTINGS -->
+      <div class="drawer-tab-pane" id="tab-radar">
+        <div class="station-meta-grid">
+          <div class="meta-item">
+            <span class="meta-label"><i class="fa-solid fa-crosshairs"></i> สถานี:</span>
+            <span class="meta-val" id="mobileStationNameDisplay">บางกรวย, นนทบุรี</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label"><i class="fa-solid fa-location-dot"></i> พิกัด:</span>
+            <span class="meta-val monospace-val" id="mobileCoordsDisplay">13.8050° N, 100.4728° E</span>
+          </div>
+        </div>
+
+        <!-- Custom Pin & Home Location Buttons (Mobile) -->
+        <div style="display:flex; flex-direction:column; gap:8px; margin: 12px 0;">
+          <button id="mobileCustomPinBtn" class="tactical-btn pin-tool-btn" style="width:100%; min-height:44px;">
+            <i class="fa-solid fa-map-pin"></i> <span>📍 เลือกพิกัดเอง (Custom Pin)</span>
+          </button>
+          <button id="mobileSetHomeBtn" class="tactical-btn home-tool-btn" style="width:100%; min-height:44px;">
+            <i class="fa-solid fa-house-chimney"></i> <span>🏠 บันทึกเป็นตำแหน่งบ้าน (Set as Home)</span>
+          </button>
+        </div>
+
+        <div class="drawer-control-box">
+          <label class="drawer-box-label"><i class="fa-solid fa-layer-group"></i> ความโปร่งใสเรดาร์: <span id="mobileOpacityVal" class="monospace-val">80%</span></label>
+          <input type="range" id="mobileOpacitySlider" min="0.1" max="1" step="0.05" value="0.80" class="touch-large-range" aria-label="ความโปร่งใสเรดาร์มือถือ">
+        </div>
+
+        <div class="drawer-control-box">
+          <label class="drawer-box-label"><i class="fa-solid fa-gauge-high"></i> ความเร็วการเล่นเรดาร์:</label>
+          <div class="speed-selector-row">
+            <button class="tactical-btn mobile-speed-opt" data-speed="0">🐢 0.5x</button>
+            <button class="tactical-btn mobile-speed-opt active" data-speed="1">🚶 1x</button>
+            <button class="tactical-btn mobile-speed-opt" data-speed="2">⚡ 2x</button>
+          </div>
+        </div>
+
+        <div class="drawer-control-box">
+          <label class="drawer-box-label">ระดับความเข้มฝน (dBZ Scale):</label>
+          <div class="legend-scale" style="width:100%; height:26px;">
+            <span class="legend-step" style="background:#00ecec; flex:1;" title="15 dBZ">15</span>
+            <span class="legend-step" style="background:#01a0f6; flex:1;" title="25 dBZ">25</span>
+            <span class="legend-step" style="background:#00e400; flex:1;" title="35 dBZ">35</span>
+            <span class="legend-step" style="background:#ff9900; flex:1;" title="45 dBZ">45</span>
+            <span class="legend-step" style="background:#e70000; flex:1;" title="55 dBZ">55</span>
+            <span class="legend-step" style="background:#9100ff; flex:1;" title="65+ dBZ">65+</span>
+          </div>
+        </div>
+
+        <button id="mobileResetStationBtn" class="tactical-btn" style="width:100%; min-height:48px; margin-top:8px;">
+          <i class="fa-solid fa-rotate-left"></i> รีเซ็ตกลับตำแหน่งบ้าน/บางกรวย
+        </button>
+      </div>
+
+      <!-- TAB 3: GROUND-TRUTH QUICK ACTION -->
+      <div class="drawer-tab-pane" id="tab-feedback">
+        <p class="modal-instruction" style="margin-bottom:12px;">
+          กดปุ่มบันทึกผลจริงเพื่อประเมินความแม่นยำและส่งข้อมูลเข้า Google Sheets ทันที:
+        </p>
+
+        <div class="decision-buttons-grid">
+          <button id="drawerFeedbackEarlyBtn" class="action-card-btn early-btn">
+            <div class="btn-action-icon"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="btn-action-info">
+              <span class="btn-action-title">1. ฝนเริ่มตกแล้ว</span>
+              <span class="btn-action-desc">บันทึกเวลาจริงทันที (คำนวณ Early/Delay)</span>
+            </div>
+            <span class="badge-status-tag">🟢 ฝนตกจริง</span>
+          </button>
+
+          <button id="drawerFeedbackDelayedBtn" class="action-card-btn delayed-btn">
+            <div class="btn-action-icon"><i class="fa-solid fa-hourglass-half"></i></div>
+            <div class="btn-action-info">
+              <span class="btn-action-title">2. ตกช้ากว่าพยากรณ์</span>
+              <span class="btn-action-desc">บันทึกเวลาจริง ณ ตอนนี้เพื่อประเมินความล่าช้า</span>
+            </div>
+            <span class="badge-status-tag">🟡 ล่าช้ากว่าคาด</span>
+          </button>
+
+          <button id="drawerFeedbackFalseAlarmBtn" class="action-card-btn false-alarm-btn">
+            <div class="btn-action-icon"><i class="fa-solid fa-circle-xmark"></i></div>
+            <div class="btn-action-info">
+              <span class="btn-action-title">3. เมฆผ่านไปแล้ว / ไม่ตกจริง</span>
+              <span class="btn-action-desc">บันทึกผลว่าพยากรณ์คลาดเคลื่อน (False Alarm)</span>
+            </div>
+            <span class="badge-status-tag">🔴 False Alarm</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       PRECISION FEEDBACK MODAL (TACTICAL DESKTOP DIALOG)
+       ========================================================================= -->
+  <div class="modal-backdrop" id="feedbackModalBackdrop" aria-hidden="true" role="dialog" aria-labelledby="modalTitle">
+    <div class="tactical-modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <i class="fa-solid fa-satellite-dish modal-icon"></i>
+          <div>
+            <h2 class="modal-title" id="modalTitle">ระบบบันทึกความแม่นยำภาคพื้นดิน</h2>
+            <span class="modal-subtitle">GROUND-TRUTH PRECISION ENGINE // PROJECT SKYSENTRY</span>
+          </div>
+        </div>
+        <button id="closeModalBtn" class="modal-close-btn" aria-label="ปิดหน้าต่าง">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Live Reference Metadata -->
+        <div class="reference-panel">
+          <div class="ref-row">
+            <span class="ref-label"><i class="fa-solid fa-location-pin"></i> พิกัดสังเกต:</span>
+            <span class="ref-val monospace-val" id="modalCoords">13.8050, 100.4728 (บางกรวย)</span>
+          </div>
+          <div class="ref-row">
+            <span class="ref-label"><i class="fa-regular fa-clock"></i> เวลาพยากรณ์ (Predicted ETA):</span>
+            <span class="ref-val monospace-val highlight-val" id="modalPredictedEta">--:--:--</span>
+          </div>
+          <div class="ref-row">
+            <span class="ref-label"><i class="fa-solid fa-stopwatch"></i> เวลาขณะนี้ (Client Time):</span>
+            <span class="ref-val monospace-val" id="modalCurrentTime">--:--:--</span>
+          </div>
+          <div class="ref-row">
+            <span class="ref-label"><i class="fa-solid fa-cloud"></i> สรุปสภาพอากาศขณะนี้:</span>
+            <span class="ref-val" id="modalWeatherSummary">กำลังดึงข้อมูล...</span>
+          </div>
+        </div>
+
+        <p class="modal-instruction">
+          โปรดเลือกสถานการณ์จริงที่เกิดขึ้นในพื้นที่เพื่อคำนวณค่าคลาดเคลื่อน (Time-Delta) และส่งข้อมูลไปยัง Google Sheets อัตโนมัติ:
+        </p>
+
+        <!-- 3 Primary Tactical Feedback Buttons -->
+        <div class="decision-buttons-grid">
+          <button id="feedbackEarlyBtn" class="action-card-btn early-btn">
+            <div class="btn-action-icon"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="btn-action-info">
+              <span class="btn-action-title">1. ฝนเริ่มตกแล้ว</span>
+              <span class="btn-action-desc">บันทึกเวลาจริงทันที (คำนวณส่วนต่าง Early/Delayed)</span>
+            </div>
+            <span class="badge-status-tag">🟢 ฝนตกจริง</span>
+          </button>
+
+          <button id="feedbackDelayedBtn" class="action-card-btn delayed-btn">
+            <div class="btn-action-icon"><i class="fa-solid fa-hourglass-half"></i></div>
+            <div class="btn-action-info">
+              <span class="btn-action-title">2. ตกช้ากว่าพยากรณ์</span>
+              <span class="btn-action-desc">บันทึกเวลาจริง ณ ตอนนี้เพื่อประเมินความล่าช้า</span>
+            </div>
+            <span class="badge-status-tag">🟡 ล่าช้ากว่าคาด</span>
+          </button>
+
+          <button id="feedbackFalseAlarmBtn" class="action-card-btn false-alarm-btn">
+            <div class="btn-action-icon"><i class="fa-solid fa-circle-xmark"></i></div>
+            <div class="btn-action-info">
+              <span class="btn-action-title">3. เมฆผ่านไปแล้ว / ไม่ตกจริง</span>
+              <span class="btn-action-desc">บันทึกผลว่าพยากรณ์คลาดเคลื่อน (False Alarm)</span>
+            </div>
+            <span class="badge-status-tag">🔴 False Alarm</span>
+          </button>
+        </div>
+
+        <!-- Submission Status Preview & Webhook Destination -->
+        <div class="webhook-meta-box">
+          <div class="webhook-target-info">
+            <i class="fa-solid fa-database"></i>
+            <span>เป้าหมาย Webhook: Google Apps Script &rarr; <code>SkySentry_GroundTruth_DB</code> (Google Sheets)</span>
+          </div>
+          <div id="modalStatusFeedback" class="modal-status-feedback">พร้อมรับข้อมูล...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       GROUND-TRUTH 2-STEP CONFIRMATION & ANTI-SPAM MODAL
+       ========================================================================= -->
+  <div class="modal-backdrop gt-confirm-backdrop" id="gtConfirmBackdrop" aria-hidden="true" role="dialog" aria-labelledby="gtConfirmTitle">
+    <div class="tactical-modal-card gt-confirm-card">
+      
+      <!-- VIEW 1: CONFIRMATION PROMPT -->
+      <div id="gtPromptView" class="gt-modal-view">
+        <div class="gt-dialog-header">
+          <div class="gt-icon-badge warning"><i class="fa-solid fa-shield-halved"></i></div>
+          <h3 class="gt-dialog-title" id="gtConfirmTitle">ยืนยันการส่งรายงานสถานการณ์พื้นที่จริงหรือไม่?</h3>
+          <p class="gt-dialog-subtext">โปรดตรวจสอบสถานะที่เลือกก่อนส่งข้อมูลเข้าสู่ระบบศูนย์กลาง (Google Sheets)</p>
+        </div>
+
+        <div class="gt-decision-preview" id="gtDecisionPreview">
+          <div class="preview-badge" id="gtPreviewBadge">🟢 1. ฝนเริ่มตกแล้ว</div>
+          <div class="preview-meta" id="gtPreviewMeta">กำลังคำนวณส่วนต่างเวลา...</div>
+        </div>
+
+        <div class="gt-dialog-actions">
+          <button id="gtCancelBtn" class="tactical-btn gt-action-btn cancel-btn" type="button">
+            <i class="fa-solid fa-xmark"></i> <span>ยกเลิก (Cancel)</span>
+          </button>
+          <button id="gtConfirmBtn" class="tactical-btn gt-action-btn confirm-btn" type="button">
+            <i class="fa-solid fa-check"></i> <span>ยืนยัน (Confirm)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- VIEW 2: ANTI-SPAM LOCK & 3-SECOND COUNTDOWN LOADING -->
+      <div id="gtLoadingView" class="gt-modal-view" style="display: none;">
+        <div class="gt-loading-pulse-ring">
+          <div class="gt-countdown-circle">
+            <span id="gtCountdownNumber" class="gt-countdown-number">3</span>
+          </div>
+        </div>
+        <h3 class="gt-loading-title">กำลังส่งข้อมูลไปยังระบบศูนย์กลาง...</h3>
+        <p class="gt-loading-subtext">
+          <i class="fa-solid fa-lock"></i> ระบบป้องกันการส่งซ้ำ (Anti-Spam Security Lock) กำลังทำงาน
+        </p>
+        <div class="gt-progress-bar-wrap">
+          <div class="gt-progress-bar-fill" id="gtProgressFill"></div>
+        </div>
+      </div>
+
+      <!-- VIEW 3: RESULT FEEDBACK (SUCCESS / ERROR) -->
+      <div id="gtResultView" class="gt-modal-view" style="display: none;">
+        <div class="gt-result-icon-box" id="gtResultIconBox">
+          <i class="fa-solid fa-circle-check" id="gtResultIcon"></i>
+        </div>
+        <h3 class="gt-result-title" id="gtResultTitle">✅ รายงานสำเร็จ! บันทึกข้อมูลภาคพื้นดินเรียบร้อย</h3>
+        <p class="gt-result-subtext" id="gtResultSubtext">สถานะ: ฝนตกจริง | บันทึกเข้า Google Sheets สำเร็จ</p>
+        <div class="gt-result-actions" id="gtResultActions" style="display: none;">
+          <button id="gtResultCloseBtn" class="tactical-btn gt-action-btn close-btn" type="button">
+            <i class="fa-solid fa-xmark"></i> <span>ปิด</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       7-DAY OUTLOOK MODAL (SEPARATE TACTICAL POPUP)
+       ========================================================================= -->
+  <div class="modal-backdrop" id="sevenDayModalBackdrop" aria-hidden="true" role="dialog" aria-labelledby="sevenDayModalTitle">
+    <div class="tactical-modal-card seven-day-modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <i class="fa-solid fa-calendar-week modal-icon"></i>
+          <div>
+            <h2 class="modal-title" id="sevenDayModalTitle">พยากรณ์อากาศล่วงหน้า 7 วัน</h2>
+            <span class="modal-subtitle">7-DAY METEOROLOGICAL OUTLOOK // OPEN-METEO</span>
+          </div>
+        </div>
+        <button id="close7DayModalBtn" class="modal-close-btn" aria-label="ปิดหน้าต่าง">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="seven-day-cards-grid" id="modal7DayCardsContainer">
+          <div class="forecast-card-placeholder">กำลังโหลดข้อมูลพยากรณ์...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- Leaflet JS (CDN) -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- SweetAlert2 (CDN) for Tactical Alerts & 2-Step Confirmation -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <!-- SkySentry Core Application Script -->
+  <script src="script.js?v=0.1.4"></script>
+</body>
+</html>

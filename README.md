@@ -1,7 +1,7 @@
 # 🌩️ Project SkySentry
 **Zero-Budget Tactical Weather Radar & Hyperlocal Storm Tracking Engine**
 
-[![Version](https://img.shields.io/badge/version-v0.1.1_(DEV_BUILD)-0284c7?style=flat-square)](https://github.com/Worapon-PZ/Project-Skysentry)
+[![Version](https://img.shields.io/badge/version-v0.1.2_(DEV_BUILD)-0284c7?style=flat-square)](https://github.com/Worapon-PZ/Project-Skysentry)
 [![Architecture](https://img.shields.io/badge/architecture-Client--Side_100%25-059669?style=flat-square)](https://github.com/Worapon-PZ/Project-Skysentry)
 [![Deployment](https://img.shields.io/badge/deployment-GitHub_Pages-22c55e?style=flat-square)](https://worapon-pz.github.io/Project-Skysentry/)
 [![License](https://img.shields.io/badge/license-MIT-64748b?style=flat-square)](LICENSE)

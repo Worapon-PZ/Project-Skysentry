@@ -154,7 +154,9 @@ function playTacticalWarningChime() {
   }
 }
 
-// Dual-Layer Radar Crossfade Interpolation State (Pure GPU Compositing)
+// 60 FPS Layer Pre-buffering & Double-Buffering Pool State
+const radarLayerPool = new Map(); // frameIndex => L.tileLayer
+let activeRadarLayer = null;
 let radarLayerA = null;
 let radarLayerB = null;
 let activeLayerRole = 'A'; // Alternates between 'A' and 'B'
@@ -243,8 +245,9 @@ function initLeafletMap() {
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
   map.createPane('radarPane');
-  map.getPane('radarPane').style.zIndex = 450;
+  map.getPane('radarPane').style.zIndex = 350;
   map.getPane('radarPane').style.pointerEvents = 'none';
+  map.getPane('radarPane').classList.add('radar-tile-pane');
 
   map.createPane('labelsPane');
   map.getPane('labelsPane').style.zIndex = 650;
@@ -771,54 +774,88 @@ mobileSpeedOptions.forEach(btn => {
   });
 });
 
-// --- 8. RAINVIEWER WEATHER RADAR PIPELINE ---
+// --- 8. RAINVIEWER WEATHER RADAR PIPELINE (60 FPS LAYER PRE-BUFFERING POOL) ---
 function getTileUrlForFrame(frame) {
   if (!apiData || !apiData.host || !frame) return '';
-  // RainViewer Tile Format: {host}{path}/512/{z}/{x}/{y}/{color_scheme}/{smooth}_{snow}.png
+  // RainViewer 512px High-DPI Tile Format: {host}{path}/512/{z}/{x}/{y}/{color_scheme}/{smooth}_{snow}.png
   // Scheme 6 = NEXRAD Level III high-contrast palette; 0_1 = crisp unsmoothed edges with snow mask
   return `${apiData.host}${frame.path}/512/{z}/{x}/{y}/6/0_1.png`;
 }
 
+/** Pre-creates and maintains a persistent pool of L.tileLayer instances for 60 FPS double-buffering */
+function getOrCreateRadarLayer(frameIndex) {
+  if (frameIndex < 0 || !radarFrames || frameIndex >= radarFrames.length) return null;
+
+  if (radarLayerPool.has(frameIndex)) {
+    return radarLayerPool.get(frameIndex);
+  }
+
+  const frame = radarFrames[frameIndex];
+  const tileUrl = getTileUrlForFrame(frame);
+  if (!tileUrl) return null;
+
+  // Leaflet tileLayer with tileSize: 512, zoomOffset: -1 to preserve geographic scale while quadrupling pixel density
+  const layer = L.tileLayer(tileUrl, {
+    tileSize: 512,
+    zoomOffset: -1,
+    opacity: 0,
+    zIndex: 100,
+    pane: 'radarPane',
+    maxNativeZoom: 7,
+    maxZoom: 18,
+    crossOrigin: 'anonymous',
+    className: 'radar-crossfade-layer'
+  }).addTo(map);
+
+  layer.on('load', () => {
+    if (frameIndex === currentFrameIndex) {
+      scheduleStormTrackerAnalysis(frameIndex);
+    }
+  });
+
+  radarLayerPool.set(frameIndex, layer);
+  return layer;
+}
+
+/** Pre-buffers timeline layers around active frame and warms remaining frames progressively */
+function prebufferTimelineLayers(centerIndex) {
+  if (!radarFrames || !radarFrames.length) return;
+
+  // Immediate sliding window pre-buffering (active, previous, next frames)
+  const windowRadius = 3;
+  for (let offset = -windowRadius; offset <= windowRadius; offset++) {
+    const idx = (centerIndex + offset + radarFrames.length) % radarFrames.length;
+    getOrCreateRadarLayer(idx);
+  }
+
+  // Progressively warm all remaining frames in the background without UI blocking
+  const warmRemainder = () => {
+    radarFrames.forEach((_, idx) => {
+      getOrCreateRadarLayer(idx);
+    });
+  };
+
+  if (window.requestIdleCallback) {
+    window.requestIdleCallback(warmRemainder, { timeout: 2500 });
+  } else {
+    setTimeout(warmRemainder, 300);
+  }
+}
+
 function initDualRadarLayers(initialFrame) {
-  if (radarLayerA && radarLayerB) return;
-  const initialUrl = getTileUrlForFrame(initialFrame);
-
-  radarLayerA = L.tileLayer(initialUrl, {
-    tileSize: 512,
-    zoomOffset: -1,
-    opacity: 0,
-    zIndex: 100,
-    pane: 'radarPane',
-    maxNativeZoom: 7,
-    maxZoom: 18,
-    crossOrigin: 'anonymous',
-    className: 'radar-crossfade-layer'
-  }).addTo(map);
-
-  radarLayerB = L.tileLayer(initialUrl, {
-    tileSize: 512,
-    zoomOffset: -1,
-    opacity: 0,
-    zIndex: 100,
-    pane: 'radarPane',
-    maxNativeZoom: 7,
-    maxZoom: 18,
-    crossOrigin: 'anonymous',
-    className: 'radar-crossfade-layer'
-  }).addTo(map);
-
-  radarLayerA.on('load', () => {
-    scheduleStormTrackerAnalysis(currentFrameIndex);
-  });
-  radarLayerB.on('load', () => {
-    scheduleStormTrackerAnalysis(currentFrameIndex);
-  });
-
-  activeLayerRole = 'A';
+  // Pre-create and buffer initial live frame layer and sliding window
+  const initialLayer = getOrCreateRadarLayer(currentLiveFrameIndex);
+  activeRadarLayer = initialLayer;
+  radarLayerA = initialLayer;
+  prebufferTimelineLayers(currentLiveFrameIndex);
 }
 
 function getActiveRadarLayer() {
-  return activeLayerRole === 'A' ? radarLayerA : radarLayerB;
+  if (activeRadarLayer) return activeRadarLayer;
+  if (currentFrameIndex >= 0 && radarLayerPool.has(currentFrameIndex)) {
+    return radarLayerPool.get(currentFrameIndex);
+  }
+  return radarLayerA;
 }
 
 function getInactiveRadarLayer() {
@@ -838,29 +875,10 @@ function setLayerOpacity(layer, opacity, skipTransition = false) {
   }
 }
 
-/** Preload tiles of the upcoming radar frame to prime the browser cache */
+/** Preload tiles of upcoming radar frames into the buffer pool */
 function preloadUpcomingFrame(targetIndex) {
-  if (!radarFrames.length || !apiData || !apiData.host) return;
-  const nextFrame = radarFrames[targetIndex];
-  if (!nextFrame) return;
-
-  const activeLayer = getActiveRadarLayer();
-  if (activeLayer && activeLayer._tiles) {
-    const nextUrlTemplate = getTileUrlForFrame(nextFrame);
-    for (const key in activeLayer._tiles) {
-      const tile = activeLayer._tiles[key];
-      if (tile && tile.coords) {
-        const { x, y, z } = tile.coords;
-        const tileUrl = nextUrlTemplate
-          .replace('{z}', z)
-          .replace('{x}', x)
-          .replace('{y}', y);
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.src = tileUrl;
-      }
-    }
-  }
+  if (!radarFrames.length) return;
+  getOrCreateRadarLayer(targetIndex);
 }
 
 function updateSliderTrackNowcastGradient() {
@@ -967,34 +985,39 @@ function showFrame(index, skipCrossfade = false) {
   if (index < 0) index = 0;
   if (index >= radarFrames.length) index = radarFrames.length - 1;
 
-  const targetFrame = radarFrames[index];
-  const targetUrl = getTileUrlForFrame(targetFrame);
+  const prevIndex = currentFrameIndex;
+  const targetLayer = getOrCreateRadarLayer(index);
+  if (!targetLayer) return;
 
-  const activeLayer = getActiveRadarLayer();
-  const inactiveLayer = getInactiveRadarLayer();
-
-  if (skipCrossfade || !activeLayer || currentFrameIndex === -1) {
+  if (skipCrossfade || prevIndex === -1 || prevIndex === index) {
     // Instant switch without crossfade (slider drag, live jump, first load)
-    if (activeLayer) {
-      setLayerOpacity(activeLayer, 0, true);
-    }
-    if (inactiveLayer) {
-      inactiveLayer.setUrl(targetUrl);
-      setLayerOpacity(inactiveLayer, radarOpacity, true);
-      activeLayerRole = (activeLayerRole === 'A' ? 'B' : 'A');
-    } else if (activeLayer) {
-      activeLayer.setUrl(targetUrl);
-      setLayerOpacity(activeLayer, radarOpacity, true);
-    }
+    radarLayerPool.forEach((layer, idx) => {
+      if (idx === index) {
+        setLayerOpacity(layer, radarOpacity, true);
+      } else {
+        setLayerOpacity(layer, 0, true);
+      }
+    });
   } else {
-    // Butter-smooth dual-layer GPU crossfade
-    inactiveLayer.setUrl(targetUrl);
-    setLayerOpacity(inactiveLayer, radarOpacity, false);
-    setLayerOpacity(activeLayer, 0, false);
-    activeLayerRole = (activeLayerRole === 'A' ? 'B' : 'A');
+    // 60 FPS Double-Buffering: Transition current layer to radarOpacity and fade out old layer to 0
+    const prevLayer = radarLayerPool.get(prevIndex);
+    if (prevLayer) {
+      setLayerOpacity(prevLayer, 0, false);
+    }
+    // Fade in target layer
+    setLayerOpacity(targetLayer, radarOpacity, false);
+
+    // Ensure any other layers are faded to 0
+    radarLayerPool.forEach((layer, idx) => {
+      if (idx !== index && idx !== prevIndex && layer.options && layer.options.opacity > 0) {
+        setLayerOpacity(layer, 0, true);
+      }
+    });
   }
 
   currentFrameIndex = index;
+  activeRadarLayer = targetLayer;
+  radarLayerA = targetLayer; // Backward compatibility hook
 
   const isNowcast = index > currentLiveFrameIndex;
   const isLiveT0 = index === currentLiveFrameIndex;
@@ -1506,6 +1529,8 @@ function extractStormCellsFromTileLayer(layer) {
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
   const mapRect = mapContainer.getBoundingClientRect();
   let drawnCount = 0;
@@ -2881,6 +2906,8 @@ function getRadarPixelData(latlng) {
         probeCanvas.width = w;
         probeCanvas.height = h;
         const pCtx = probeCanvas.getContext('2d', { willReadFrequently: true });
+        pCtx.imageSmoothingEnabled = true;
+        pCtx.imageSmoothingQuality = 'high';
         pCtx.drawImage(tile.el, startX, startY, w, h, 0, 0, w, h);
         const imgData = pCtx.getImageData(0, 0, w, h).data;
 
@@ -2917,15 +2944,26 @@ function getRadarPixelData(latlng) {
 }
 
 /**
- * Marshall-Palmer relation: Z = 200 * (R ^ 1.6) -> R = (10 ^ (dBZ / 10) / 200) ^ (1 / 1.6)
+ * Marshall-Palmer Recalibration: Z = 200 * (R ^ 1.6) -> R = (10^(dBZ/10) / 200) ^ 0.625
  * Calculates rain rate R (mm/h) from radar reflectivity factor Z (dBZ).
  */
-function dbzToRainRate(dbz) {
-  if (dbz < 10) return 0.0;
-  const z = Math.pow(10, dbz / 10);
-  const r = Math.pow(z / 200, 1 / 1.6);
-  return Math.round(r * 10) / 10;
+function calculateRainRate(dBZ) {
+  // Cutoff ground clutter and trace moisture
+  if (!dBZ || dBZ < 15) return 0.0;
+  
+  // Marshall-Palmer Relation: Z = 200 * (R ^ 1.6) -> R = (10^(dBZ/10) / 200) ^ 0.625
+  const Z = Math.pow(10, dBZ / 10);
+  const R = Math.pow(Z / 200, 0.625);
+  
+  return parseFloat(R.toFixed(2));
 }
+
+function dbzToRainRate(dbz) {
+  return calculateRainRate(dbz);
+}
+
+window.calculateRainRate = calculateRainRate;
+window.dbzToRainRate = dbzToRainRate;
 
 /**
  * Continuous Fine-Graduated Color-to-dBZ matching via 3D Vector Segment Projection.
@@ -3061,7 +3099,7 @@ async function openRainInspector(e) {
   if (pixel && pixel.a >= 15) {
     // Rain cell echo detected on radar tile!
     dbz = sampleDbzFromPixel(pixel.r, pixel.g, pixel.b, pixel.a);
-    mmph = dbzToRainRate(dbz);
+    mmph = calculateRainRate(dbz);
   } else if (pixel && pixel.a < 15) {
     // Transparent tile = clear sky
     dbz = 0;
@@ -3084,8 +3122,8 @@ async function openRainInspector(e) {
   }
 
   const { text: catText, cls: catCls } = classifyRainRate(mmph);
-  const dbzDisplay = dbz >= 10 ? `${dbz.toFixed(1)} dBZ` : '< 10 dBZ (ไม่มีฝน)';
-  const rainRateDisplay = mmph > 0 ? `${mmph.toFixed(1)} mm/h` : '0.0 mm/h';
+  const dbzDisplay = dbz >= 15 ? `${dbz.toFixed(1)} dBZ` : '< 15 dBZ (ไม่มีฝน / ละอองเมฆ)';
+  const rainRateDisplay = mmph > 0 ? `${mmph.toFixed(2)} mm/h` : '0.00 mm/h';
 
   // Micro color chip indicator for sampled radar echo
   const colorDotHtml = (pixel && pixel.a >= 15 && dbz >= 10)

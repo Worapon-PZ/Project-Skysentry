@@ -2112,9 +2112,11 @@ body.weather-dock-open .weather-pill-trigger {
   border-color: var(--accent-cyan);
 }
 
-/* Dual-Layer Radar Crossfade Interpolation */
+/* 60 FPS Layer Pre-buffering & Double-Buffering Cross-fade */
+.leaflet-pane.radar-tile-pane, 
+.leaflet-pane.radar-tile-pane .leaflet-layer,
 .radar-crossfade-layer {
-  transition: opacity var(--radar-crossfade-duration, 0.28s) ease-in-out !important;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   will-change: opacity;
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
@@ -2122,6 +2124,14 @@ body.weather-dock-open .weather-pill-trigger {
 
 .radar-crossfade-layer.no-transition {
   transition: none !important;
+}
+
+/* 512px High-DPI Tiles & Anti-Aliasing (Smooth jagged edges) */
+.leaflet-radarPane-pane img,
+.leaflet-pane.radar-tile-pane img {
+  image-rendering: auto !important; /* Enable browser bilinear filtering */
+  filter: blur(0.4px); /* Subtle anti-aliasing to blend step edges */
+  transform: translateZ(0);
 }
 
 /* ==============================================================================

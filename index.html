@@ -25,52 +25,35 @@
   <!-- SkySentry Tactical Stylesheet -->
   <link rel="stylesheet" href="style.css?v=0.1.4">
 </head>
-<body>
+<body class="light-theme">
   <!-- Fullscreen Leaflet Map Container -->
   <div id="map"></div>
 
   <!-- =========================================================================
        TOP-CENTER: SLIM TACTICAL STORM ALERT PILL (IMAGE 1 MATCH)
        ========================================================================= -->
-  <div class="tactical-panel tactical-storm-card alert-normal" id="tacticalStormCard" role="status" aria-live="polite">
+  <div class="tactical-panel toast-banner tactical-storm-card alert-normal" id="tacticalStormCard" role="status" aria-live="polite">
     <div class="storm-card-main">
       <span class="storm-card-icon" id="stormCardIcon"><i class="fa-solid fa-circle-check"></i></span>
       <div class="storm-card-content">
-        <span class="storm-card-title" id="stormCardTitle">สภาพอากาศปกติ • ไม่พบกลุ่มฝนคุกคามในรัศมี 40 กม.</span>
+        <span class="storm-card-title" id="stormCardTitle">🟢 สภาพอากาศปกติ • ไม่พบกลุ่มฝนคุกคามในรัศมี 40 กม.</span>
       </div>
     </div>
     <div class="storm-card-badge monospace-val" id="stormCardBadge">NORMAL // 40KM</div>
   </div>
 
   <!-- =========================================================================
-       DESKTOP TOP-LEFT: TACTICAL HUD & ACCORDION (IMAGE 1 MATCH)
+       DESKTOP TOP-LEFT: TACTICAL HUD (ULTRA-MINIMALIST - v0.1.1 SPEC)
        ========================================================================= -->
-  <header class="tactical-panel top-left-panel" id="headerPanel">
+  <header class="tactical-panel hud-panel top-left-panel" id="headerPanel">
     <div class="hud-brand-row">
       <div class="brand-titles">
         <h1 class="brand-title">PROJECT SKYSENTRY</h1>
         <div class="brand-sub-badge">
-          <span class="sub-text">v0.1.0 (DEV BUILD) &bull; ACTIVE</span>
+          <span class="sub-text">v0.1.1 [DEV BUILD] • ACTIVE</span>
           <span class="pulsing-beacon"></span>
         </div>
       </div>
-      <span id="zoomBadge" class="zoom-chip" style="display:none;">Z: 10</span>
-    </div>
-
-    <!-- Station Coordinates Inset Box -->
-    <div class="hud-station-box">
-      <div class="station-box-row">
-        <span class="station-box-name"><i class="fa-solid fa-location-dot"></i> <span id="stationNameDisplay">บางกรวย, นนทบุรี</span></span>
-        <span class="station-box-lat monospace-val" id="coordsDisplayLat">13.8050° N,</span>
-      </div>
-      <div class="station-box-row">
-        <span class="station-box-sub">(Bang Kruai)</span>
-        <span class="station-box-lon monospace-val" id="coordsDisplayLon">100.4728° E</span>
-      </div>
-      <div class="station-box-row threat-row">
-        <span class="station-box-threat"><i class="fa-solid fa-crosshairs"></i> เป้าเฝ้าระวัง: 40 กม.</span>
-      </div>
-      <span id="coordsDisplay" class="sr-only">13.8050° N, 100.4728° E</span>
     </div>
 
     <!-- Action Buttons Row -->
@@ -80,23 +63,19 @@
       </button>
 
       <div class="hud-dropdown-wrap">
-        <button id="hudSettingsBtn" class="tool-btn settings-dropdown-btn" title="ตัวเลือกพิกัดเพิ่มเติม" aria-haspopup="true" aria-expanded="false">
-          <i class="fa-solid fa-gear"></i> <span>ตัวเลือก</span> <i class="fa-solid fa-chevron-down caret-icon"></i>
+        <button id="hudSettingsBtn" class="tool-btn settings-dropdown-btn settings-dropdown icon-only-btn" title="ตัวเลือกพิกัดเพิ่มเติม" aria-haspopup="true" aria-expanded="false">
+          <i class="fa-solid fa-gear"></i>
         </button>
 
-        <div class="hud-dropdown-menu" id="hudSettingsMenu">
+        <div class="hud-dropdown-menu settings-dropdown-menu settings-dropdown" id="hudSettingsMenu">
+          <button id="setHomeBtn" class="dropdown-item" title="บันทึกพิกัดปัจจุบันเป็นตำแหน่งบ้าน">
+            <i class="fa-solid fa-house-chimney"></i> <span>🏠 บันทึกบ้าน</span>
+          </button>
           <button id="locateBtn" class="dropdown-item" title="ใช้พิกัดตำแหน่งจริงของอุปกรณ์ (GPS Geolocation)">
-            <i class="fa-solid fa-location-crosshairs"></i> <span>พิกัดของฉัน</span>
+            <i class="fa-solid fa-location-crosshairs"></i> <span>🎯 พิกัดของฉัน</span>
           </button>
           <button id="resetLocationBtn" class="dropdown-item" title="กลับสู่ตำแหน่งเริ่มต้น/บ้าน">
-            <i class="fa-solid fa-rotate-left"></i> <span>รีเซ็ต</span>
-          </button>
-          <button id="setHomeBtn" class="dropdown-item" title="บันทึกพิกัดปัจจุบันเป็นตำแหน่งบ้าน">
-            <i class="fa-solid fa-house-chimney"></i> <span>บันทึกบ้าน</span>
-          </button>
-          <div class="dropdown-divider"></div>
-          <button id="themeToggleBtn" class="dropdown-item" title="สลับโหมดสว่าง/มืด (Light/Dark Theme)" aria-label="สลับโหมดสว่าง/มืด">
-            <i class="fa-solid fa-moon" id="themeIcon"></i> <span id="themeText">โหมดมืด</span>
+            <i class="fa-solid fa-rotate-left"></i> <span>🔄 รีเซ็ต</span>
           </button>
         </div>
       </div>
@@ -104,6 +83,14 @@
 
     <!-- Compatibility Preserved DOM Hooks (Hidden) -->
     <div class="sr-only" aria-hidden="true" style="display:none;">
+      <div id="hudStationBox">
+        <span id="stationNameDisplay">บางกรวย, นนทบุรี</span>
+        <span id="coordsDisplay">13.8050° N, 100.4728° E</span>
+        <span id="coordsDisplayLat">13.8050° N,</span>
+        <span id="coordsDisplayLon">100.4728° E</span>
+      </div>
+      <span id="zoomBadge">Z: 10</span>
+      <button id="themeToggleBtn"><i class="fa-solid fa-moon" id="themeIcon"></i><span id="themeText">โหมดมืด</span></button>
       <button id="leftPanelToggleBtn"></button>
       <div id="leftCollapsedBadge"><span id="leftCollapsedText"></span></div>
       <div id="leftPanelContent"></div>
@@ -115,16 +102,16 @@
        DESKTOP RIGHT: WEATHER DOCK (WINDY-STYLE ACCORDION DRAWER - IMAGE 1 MATCH)
        ========================================================================= -->
   <aside class="tactical-panel right-weather-dock" id="weatherPanel">
-    <div class="panel-section-title">
-      <div class="title-with-icon">
+    <div class="panel-section-title drawer-header">
+      <div class="title-with-icon collapsed-summary">
         <i class="fa-solid fa-cloud-sun-rain"></i>
-        <span>สภาพอากาศสด (OPEN-METEO)</span>
+        <span>🌦️ สภาพอากาศสด (OPEN-METEO)</span>
         <span class="collapsed-weather-chip" id="collapsedWeatherChip">--°C</span>
       </div>
       <div class="panel-header-actions">
         <span class="refresh-indicator" id="weatherRefreshBadge" title="อัปเดตอัตโนมัติทุก 10 นาที"><i class="fa-solid fa-arrows-rotate"></i> สด</span>
-        <button id="rightPanelToggleBtn" class="panel-collapse-btn drawer-toggle-btn" title="พับเก็บ / ขยายสภาพอากาศ" aria-label="พับเก็บ / ขยายสภาพอากาศ">
-          <span id="rightPanelToggleText">COLLAPSE</span> <i class="fa-solid fa-chevron-down" id="rightPanelToggleIcon"></i>
+        <button id="rightPanelToggleBtn" class="panel-collapse-btn drawer-toggle-btn icon-only-toggle" title="พับเก็บ / ขยายสภาพอากาศ" aria-label="พับเก็บ / ขยายสภาพอากาศ">
+          <i class="fa-solid fa-chevron-right" id="rightPanelToggleIcon"></i>
         </button>
       </div>
     </div>
@@ -199,43 +186,56 @@
   </aside>
 
   <!-- =========================================================================
-       DESKTOP BOTTOM-CENTER: SLIM HORIZONTAL TIMELINE BAR (IMAGE 1 MATCH)
+       DESKTOP BOTTOM-CENTER: 2-TIER TIMELINE CONTROLLER (CLEAN FLEX LAYOUT)
        ========================================================================= -->
-  <main class="tactical-panel bottom-center-panel slim-timeline-bar" id="playbackPanel" role="region" aria-label="แถบควบคุมเวลาเรดาร์">
-    <!-- 1. Play/Pause Button (Round Blue Icon) -->
-    <button id="playPauseBtn" class="tactical-btn play-btn slim-play-btn" title="เล่น/หยุดภาพเคลื่อนไหวเรดาร์" disabled>
-      <i class="fa-solid fa-play" id="playIcon"></i>
-      <span id="playText" class="sr-only">เล่นเรดาร์</span>
-    </button>
-
-    <!-- 2. Step Backward Button (|<) -->
-    <button id="prevBtn" class="tactical-btn slim-nav-btn" title="เฟรมก่อนหน้า (-5 นาที)" disabled>
-      <i class="fa-solid fa-backward-step"></i>
-    </button>
-
-    <!-- 3. Slider Container with Past & Nowcast Dual Labels -->
-    <div class="slim-slider-container">
-      <div class="slider-nowcast-labels">
-        <span class="slider-label-past"><i class="fa-solid fa-clock-rotate-left"></i> PAST (-2 ชม.)</span>
-        <span class="timeline-floating-time monospace-val" id="timestamp">--:--:-- ICT</span>
-        <span class="slider-label-nowcast"><i class="fa-solid fa-bolt-lightning"></i> NOWCAST (+30 นาที)</span>
+  <main class="tactical-panel timeline-container bottom-center-panel" id="playbackPanel" role="region" aria-label="แถบควบคุมเวลาเรดาร์">
+    <!-- Top Row (Status & Timestamp Bar) -->
+    <div class="timeline-top-row">
+      <div class="timeline-timestamp-wrap">
+        <span class="timeline-timestamp monospace-val" id="timestamp">🕒 กำลังโหลดข้อมูลเรดาร์...</span>
       </div>
-      <input type="range" id="timelineSlider" min="0" max="0" value="0" step="1" disabled aria-label="แถบเวลาภาพเรดาร์">
+      <div class="timeline-mode-wrap">
+        <span class="timeline-mode-badge badge-past" id="timelineModeBadge">● PAST (-2 ชม.)</span>
+      </div>
     </div>
 
-    <!-- 4. Step Forward Button (>|) -->
-    <button id="nextBtn" class="tactical-btn slim-nav-btn" title="เฟรมถัดไป (+5 นาที)" disabled>
-      <i class="fa-solid fa-forward-step"></i>
-    </button>
+    <!-- Bottom Row (Playback & Track Controls) -->
+    <div class="timeline-bottom-row">
+      <!-- Playback Buttons: [⏮️] [▶️/⏸️] [⏭️] -->
+      <div class="playback-btn-group">
+        <button id="prevBtn" class="tactical-btn timeline-ctrl-btn" title="เฟรมก่อนหน้า (-5 นาที)" disabled>
+          <i class="fa-solid fa-backward-step"></i>
+        </button>
+        <button id="playPauseBtn" class="tactical-btn play-btn timeline-play-btn slim-play-btn" title="เล่น/หยุดภาพเคลื่อนไหวเรดาร์" disabled>
+          <i class="fa-solid fa-play" id="playIcon"></i>
+          <span id="playText" class="sr-only">เล่นเรดาร์</span>
+        </button>
+        <button id="nextBtn" class="tactical-btn timeline-ctrl-btn" title="เฟรมถัดไป (+5 นาที)" disabled>
+          <i class="fa-solid fa-forward-step"></i>
+        </button>
+      </div>
 
-    <!-- 5. Speed Button (1x) -->
-    <button id="speedBtn" class="tactical-btn speed-btn slim-speed-btn" title="ความเร็วการเล่น (คลิกเพื่อสลับ: 0.5x -> 1x -> 2x)">
-      <span id="speedText">1x</span>
-    </button>
+      <!-- Timeline Slider Track: flex: 1; margin: 0 12px; min-width: 240px; -->
+      <div class="timeline-slider-wrap">
+        <input type="range" id="timelineSlider" min="0" max="0" value="0" step="1" disabled aria-label="แถบเวลาภาพเรดาร์">
+      </div>
+
+      <!-- Right Controls: Speed Toggle & Jump to Live Button -->
+      <div class="playback-aux-group">
+        <button id="speedBtn" class="tactical-btn speed-btn timeline-aux-btn" title="ความเร็วการเล่น (คลิกเพื่อสลับ: 0.5x -> 1x -> 2x)">
+          <span id="speedText">1x</span>
+        </button>
+        <button id="jumpToLiveBtn" class="tactical-btn live-jump-btn timeline-aux-btn" title="ไปยังภาพสดปัจจุบัน (Live T0)">
+          <span class="live-dot-pulse">●</span>
+          <span>สด</span>
+        </button>
+      </div>
+    </div>
 
     <!-- Preserved compatibility hooks (Hidden) -->
     <div class="sr-only" aria-hidden="true" style="display:none;">
       <div id="frameCounter">0 / 0</div>
+      <button id="loopBtn"></button>
       <button id="firstFrameBtn"></button>
       <button id="lastFrameBtn"></button>
       <button id="playbackPanelToggleBtn"></button>
@@ -244,30 +244,7 @@
   </main>
 
   <!-- =========================================================================
-       DESKTOP BOTTOM-RIGHT: DOCKED COMPACT dBZ COLOR LEGEND & OPACITY (IMAGE 1 MATCH)
-       ========================================================================= -->
-  <aside class="tactical-panel docked-radar-legend" id="dockedRadarLegend" role="complementary" aria-label="คำอธิบายความเข้มเรดาร์">
-    <div class="legend-scale-row">
-      <span class="legend-title">dBZ:</span>
-      <div class="legend-scale">
-        <span class="legend-step" style="background:#00ecec;" title="15-20 dBZ: ละอองฝน">15</span>
-        <span class="legend-step" style="background:#01a0f6;" title="20-30 dBZ: ฝนเล็กน้อย">20</span>
-        <span class="legend-step" style="background:#00e400;" title="30-35 dBZ: ฝนปานกลาง">25</span>
-        <span class="legend-step" style="background:#ff9900;" title="35-45 dBZ: ฝนปานกลางถึงหนัก">35</span>
-        <span class="legend-step" style="background:#e70000;" title="45-55 dBZ: ฝนตกหนัก">45</span>
-        <span class="legend-step" style="background:#b91c1c;" title="55-65 dBZ: ฝนหนักมาก">55</span>
-        <span class="legend-step" style="background:#9100ff;" title="65+ dBZ: ลูกเห็บ/พายุรุนแรง">65+</span>
-      </div>
-    </div>
-    <div class="docked-opacity-wrap" title="ปรับความโปร่งใสเรดาร์">
-      <i class="fa-solid fa-sliders opacity-icon"></i>
-      <input type="range" id="opacitySlider" min="0.1" max="1" step="0.05" value="0.80" aria-label="ความโปร่งใสของเลเยอร์เรดาร์">
-      <span id="opacityVal" class="monospace-val opacity-pct">80%</span>
-    </div>
-  </aside>
-
-  <!-- =========================================================================
-       DESKTOP BOTTOM-LEFT: GROUND-TRUTH TACTICAL BUTTON (BESIDE ZOOM - IMAGE 1 MATCH)
+       DESKTOP BOTTOM-LEFT: GROUND-TRUTH & MICRO dBZ STRIP (ADJACENT TO ZOOM)
        ========================================================================= -->
   <aside class="bottom-left-action" id="feedbackActionContainer">
     <button id="openFeedbackModalBtn" class="ground-truth-trigger-btn" aria-haspopup="dialog" aria-expanded="false" title="เปิดระบบบันทึกความแม่นยำภาคพื้นดิน">
@@ -279,7 +256,27 @@
         <span class="trigger-sub-text">บันทึกผลจริง (GROUND-TRUTH)</span>
       </div>
     </button>
+
+    <!-- Micro dBZ Legend directly UNDER Ground-Truth button -->
+    <div class="micro-dbz-legend" id="microDbzLegend" aria-label="แถบสีความแรงฝน dBZ">
+      <span class="micro-dbz-title">dBZ:</span>
+      <div class="micro-dbz-scale">
+        <span class="micro-dbz-step dbz-15" style="background:#00ecec;" title="15 dBZ: ละอองฝน">15</span>
+        <span class="micro-dbz-step dbz-25" style="background:#00e400;" title="25 dBZ: ฝนเล็กน้อยถึงปานกลาง">25</span>
+        <span class="micro-dbz-step dbz-35" style="background:#ff9900;" title="35 dBZ: ฝนปานกลางถึงหนัก">35</span>
+        <span class="micro-dbz-step dbz-45" style="background:#e70000;" title="45 dBZ: ฝนตกหนัก">45</span>
+        <span class="micro-dbz-step dbz-55" style="background:#b91c1c;" title="55 dBZ: ฝนหนักมาก">55</span>
+        <span class="micro-dbz-step dbz-65" style="background:#9100ff;" title="65 dBZ: ลูกเห็บ/พายุรุนแรง">65</span>
+      </div>
+    </div>
   </aside>
+
+  <!-- Compatibility Hooks (Hidden) -->
+  <div class="sr-only" aria-hidden="true" style="display:none;">
+    <aside id="dockedRadarLegend"></aside>
+    <input type="range" id="opacitySlider" min="0.1" max="1" step="0.05" value="0.80">
+    <span id="opacityVal">80%</span>
+  </div>
 
   <!-- =========================================================================
        MOBILE-FIRST UI DOCK & TOP BAR (VISIBLE ON SCREENS < 768px)

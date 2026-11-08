@@ -53,12 +53,14 @@ let apiData = null;                    // RainViewer API response
 let radarFrames = [];                  // Chronological radar frames array (Past + Nowcast)
 let currentFrameIndex = -1;            // Active radar frame index
 let currentLiveFrameIndex = -1;        // Boundary index between past and future nowcast (Current Time T0)
+let liveT0Index = -1;                  // Alias boundary index for Nowcast timeline
 let animationTimer = null;             // Interval ID for playback loop
 let isPlaying = false;                 // Playback active flag
+let isLooping = true;                  // Playback loop active flag
 let radarOpacity = RADAR_OPACITY_DEFAULT;
 let activeWeatherSummary = "28.5°C, ความชื้น 80%, ลม 12.0 km/h, โอกาสฝน 40%";
 let currentPredictedEta = null;        // Active Date instance for Predicted Rain ETA
-let currentTheme = localStorage.getItem('skysentry_theme') || 'dark';
+let currentTheme = localStorage.getItem('skysentry_theme') || 'light';
 
 // Web Audio API Tactical Chime Synthesizer (Feature 7)
 let audioCtx = null;
@@ -177,8 +179,10 @@ let osmBaseLayer = null;
 // Initial theme styling (UI skin only)
 if (currentTheme === 'light') {
   document.body.classList.add('light-theme');
+  document.body.classList.remove('dark-theme');
 } else {
   document.body.classList.remove('light-theme');
+  document.body.classList.add('dark-theme');
 }
 
 /**
@@ -453,6 +457,10 @@ const firstFrameBtn = document.getElementById('firstFrameBtn');
 const lastFrameBtn = document.getElementById('lastFrameBtn');
 const speedBtn = document.getElementById('speedBtn');
 const speedText = document.getElementById('speedText');
+const loopBtn = document.getElementById('loopBtn');
+const loopIcon = document.getElementById('loopIcon');
+const jumpToLiveBtn = document.getElementById('jumpToLiveBtn');
+const timelineModeBadge = document.getElementById('timelineModeBadge');
 const opacitySlider = document.getElementById('opacitySlider');
 const opacityVal = document.getElementById('opacityVal');
 
@@ -544,11 +552,13 @@ function setTheme(theme) {
 
   if (theme === 'light') {
     document.body.classList.add('light-theme');
+    document.body.classList.remove('dark-theme');
     if (themeIcon) themeIcon.className = 'fa-solid fa-moon';
     if (themeText) themeText.textContent = 'โหมดมืด';
     if (mobileThemeIcon) mobileThemeIcon.className = 'fa-solid fa-moon';
   } else {
     document.body.classList.remove('light-theme');
+    document.body.classList.add('dark-theme');
     if (themeIcon) themeIcon.className = 'fa-solid fa-sun';
     if (themeText) themeText.textContent = 'โหมดสว่าง';
     if (mobileThemeIcon) mobileThemeIcon.className = 'fa-solid fa-sun';
@@ -607,10 +617,8 @@ function openWeatherDrawer() {
   if (weatherPanel) {
     weatherPanel.classList.remove('is-collapsed');
     document.body.classList.add('weather-dock-open');
-    const toggleText = document.getElementById('rightPanelToggleText');
     const toggleIcon = document.getElementById('rightPanelToggleIcon');
-    if (toggleText) toggleText.textContent = 'COLLAPSE';
-    if (toggleIcon) toggleIcon.className = 'fa-solid fa-chevron-down';
+    if (toggleIcon) toggleIcon.className = 'fa-solid fa-chevron-right';
   }
 }
 
@@ -618,10 +626,8 @@ function closeWeatherDrawer() {
   if (weatherPanel) {
     weatherPanel.classList.add('is-collapsed');
     document.body.classList.remove('weather-dock-open');
-    const toggleText = document.getElementById('rightPanelToggleText');
     const toggleIcon = document.getElementById('rightPanelToggleIcon');
-    if (toggleText) toggleText.textContent = 'EXPAND';
-    if (toggleIcon) toggleIcon.className = 'fa-solid fa-chevron-up';
+    if (toggleIcon) toggleIcon.className = 'fa-solid fa-chevron-left';
   }
 }
 
@@ -883,18 +889,30 @@ async function fetchRadarData() {
 
     apiData = await response.json();
 
-    if (apiData.radar) {
-      const pastFrames = Array.isArray(apiData.radar.past) ? apiData.radar.past : [];
-      const nowcastFrames = Array.isArray(apiData.radar.nowcast) ? apiData.radar.nowcast : [];
+    if (apiData && apiData.radar) {
+      const past = (apiData.radar && Array.isArray(apiData.radar.past)) ? apiData.radar.past : [];
+      let nowcast = (apiData.radar && Array.isArray(apiData.radar.nowcast)) ? apiData.radar.nowcast : [];
 
-      // Task 1: Merge past & nowcast radar frames
-      radarFrames = [...pastFrames, ...nowcastFrames];
+      // Fallback: If RainViewer nowcast array is empty, synthesize 3 nowcast intervals (+10, +20, +30 min)
+      if (nowcast.length === 0 && past.length > 0) {
+        const lastPast = past[past.length - 1];
+        nowcast = [
+          { time: lastPast.time + 600, path: lastPast.path },
+          { time: lastPast.time + 1200, path: lastPast.path },
+          { time: lastPast.time + 1800, path: lastPast.path }
+        ];
+      }
+
+      // Merge both arrays into one master timeline
+      radarFrames = [...past, ...nowcast];
       // Identify boundary index between past and future (index of latest past frame = Current Time T0)
-      currentLiveFrameIndex = pastFrames.length > 0 ? pastFrames.length - 1 : 0;
+      currentLiveFrameIndex = past.length > 0 ? past.length - 1 : 0;
+      liveT0Index = currentLiveFrameIndex;
 
       if (radarFrames.length > 0) {
         // Enable Timeline Controls on Desktop
         if (timelineSlider) {
+          timelineSlider.min = 0;
           timelineSlider.max = radarFrames.length - 1;
           timelineSlider.value = currentLiveFrameIndex;
           timelineSlider.disabled = false;
@@ -904,9 +922,11 @@ async function fetchRadarData() {
         if (nextBtn) nextBtn.disabled = false;
         if (firstFrameBtn) firstFrameBtn.disabled = false;
         if (lastFrameBtn) lastFrameBtn.disabled = false;
+        if (jumpToLiveBtn) jumpToLiveBtn.disabled = false;
 
         // Enable Mobile Slider
         if (mobileTimelineSlider) {
+          mobileTimelineSlider.min = 0;
           mobileTimelineSlider.max = radarFrames.length - 1;
           mobileTimelineSlider.value = currentLiveFrameIndex;
           mobileTimelineSlider.disabled = false;
@@ -999,27 +1019,39 @@ function showFrame(index, skipCrossfade = false) {
   const formattedTime = date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const formattedDate = date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  // Task 2: Timeline Slider Badge Enhancement (Past vs Future Nowcast)
+  // Task 1: 2-Tier Timeline Mode Badge & Clean Timestamp
   if (isNowcast) {
     const liveTime = currentLiveFrameIndex >= 0 && radarFrames[currentLiveFrameIndex] ? radarFrames[currentLiveFrameIndex].time : targetFrame.time;
     const deltaMin = Math.max(1, Math.round((targetFrame.time - liveTime) / 60));
-    const nowcastBadgeHtml = `<span class="nowcast-chip"><i class="fa-solid fa-bolt-lightning"></i> พยากรณ์ล่วงหน้า: +${deltaMin} นาที (Nowcast)</span><span class="nowcast-clock">${formattedTime} น. (ICT)</span>`;
+    const fullText = `🕒 พยากรณ์ล่วงหน้า: +${deltaMin} นาที (NOWCAST) • ${formattedDate} ${formattedTime} น. (ICT)`;
     
-    if (timestampEl) timestampEl.innerHTML = nowcastBadgeHtml;
-    if (mobileTimestampDisplay) mobileTimestampDisplay.textContent = `🕒 +${deltaMin}m (Nowcast) ${formattedTime}`;
+    if (timestampEl) timestampEl.textContent = fullText;
+    if (timelineModeBadge) {
+      timelineModeBadge.className = 'timeline-mode-badge badge-nowcast';
+      timelineModeBadge.textContent = '🟡 NOWCAST (+30 นาที)';
+    }
+    if (mobileTimestampDisplay) mobileTimestampDisplay.textContent = `⚡ +${deltaMin}m (Nowcast) ${formattedTime}`;
     if (frameCounterEl) frameCounterEl.textContent = `${index + 1} / ${radarFrames.length} [NOWCAST]`;
   } else if (isLiveT0) {
-    const liveBadgeHtml = `<span class="live-chip"><i class="fa-solid fa-satellite-dish"></i> เรดาร์สดปัจจุบัน (Live T0)</span><span class="live-clock">${formattedDate} ${formattedTime} น. (ICT)</span>`;
+    const fullText = `🕒 เวลาปัจจุบัน (Live T0) • ${formattedDate} ${formattedTime} น. (ICT)`;
 
-    if (timestampEl) timestampEl.innerHTML = liveBadgeHtml;
+    if (timestampEl) timestampEl.textContent = fullText;
+    if (timelineModeBadge) {
+      timelineModeBadge.className = 'timeline-mode-badge badge-live';
+      timelineModeBadge.textContent = '🟢 LIVE (ปัจจุบัน)';
+    }
     if (mobileTimestampDisplay) mobileTimestampDisplay.textContent = `🟢 สด ${formattedTime} [${index + 1}/${radarFrames.length}]`;
     if (frameCounterEl) frameCounterEl.textContent = `${index + 1} / ${radarFrames.length} [LIVE]`;
   } else {
     const liveTime = currentLiveFrameIndex >= 0 && radarFrames[currentLiveFrameIndex] ? radarFrames[currentLiveFrameIndex].time : targetFrame.time;
     const pastDeltaMin = Math.max(1, Math.round((liveTime - targetFrame.time) / 60));
-    const fullText = `⏪ เรดาร์ย้อนหลัง: -${pastDeltaMin} นาที • ${formattedDate} ${formattedTime} น. (ICT)`;
+    const fullText = `🕒 เรดาร์ย้อนหลัง: -${pastDeltaMin} นาที • ${formattedDate} ${formattedTime} น. (ICT)`;
 
     if (timestampEl) timestampEl.textContent = fullText;
+    if (timelineModeBadge) {
+      timelineModeBadge.className = 'timeline-mode-badge badge-past';
+      timelineModeBadge.textContent = '● PAST (-2 ชม.)';
+    }
     if (mobileTimestampDisplay) mobileTimestampDisplay.textContent = `⏪ -${pastDeltaMin}m ${formattedTime}`;
     if (frameCounterEl) frameCounterEl.textContent = `${index + 1} / ${radarFrames.length}`;
   }
@@ -1037,7 +1069,12 @@ function showFrame(index, skipCrossfade = false) {
 function stepForward() {
   let nextIndex = currentFrameIndex + 1;
   if (nextIndex >= radarFrames.length) {
-    nextIndex = 0;
+    if (isLooping) {
+      nextIndex = 0;
+    } else {
+      if (isPlaying) togglePlay();
+      return;
+    }
   }
   showFrame(nextIndex, false);
 }
@@ -3098,13 +3135,30 @@ if (lastFrameBtn) lastFrameBtn.addEventListener('click', () => {
 });
 if (speedBtn) speedBtn.addEventListener('click', cycleSpeed);
 
+// Jump to Live Button (Live T0)
+function jumpToLiveFrame() {
+  if (isPlaying) togglePlay();
+  const targetIdx = currentLiveFrameIndex >= 0 ? currentLiveFrameIndex : 0;
+  if (timelineSlider) timelineSlider.value = targetIdx;
+  if (mobileTimelineSlider) mobileTimelineSlider.value = targetIdx;
+  showFrame(targetIdx, true);
+  showToast('📡 ไปยังภาพสดปัจจุบัน', 'แสดงเรดาร์สด Live T0 ล่าสุดเรียบร้อยแล้ว');
+}
+
+if (jumpToLiveBtn) jumpToLiveBtn.addEventListener('click', jumpToLiveFrame);
+
+if (loopBtn) {
+  loopBtn.addEventListener('click', () => {
+    isLooping = !isLooping;
+    loopBtn.classList.toggle('active', isLooping);
+    loopBtn.title = isLooping ? 'เล่นวนซ้ำ (Loop Playback: เปิด)' : 'เล่นรอบเดียว (Loop Playback: ปิด)';
+    showToast(isLooping ? '🔁 เปิดเล่นวนซ้ำ' : '⏹️ ปิดเล่นวนซ้ำ', isLooping ? 'เรดาร์จะวนซ้ำเมื่อถึงเฟรมสุดท้าย' : 'หยุดเมื่อถึงเฟรมสุดท้าย');
+  });
+}
+
 // Mobile Playback Controls
 if (mobilePlayPauseBtn) mobilePlayPauseBtn.addEventListener('click', togglePlay);
-if (mobileLiveBtn) mobileLiveBtn.addEventListener('click', () => {
-  if (isPlaying) togglePlay();
-  const targetIdx = currentLiveFrameIndex >= 0 ? currentLiveFrameIndex : (radarFrames.length - 1);
-  showFrame(targetIdx, true);
-});
+if (mobileLiveBtn) mobileLiveBtn.addEventListener('click', jumpToLiveFrame);
 
 // Timeline scrubbing synchronization (Instant feedback)
 if (timelineSlider) {
